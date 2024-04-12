@@ -74,7 +74,7 @@ window as output).
 But I don't want this experiment to get so far out of hand as to hack
 into the source of /sam/.
 To still continue experiments with these kinds of regexps,
-I did a small script called [[ssam][]], accessing
+I did a small script called [[https://github.com/e17i/unix-sam/blob/gh-pages/ssam][ssam]], accessing
 /sam/ as a stream editor from the command line. But beware, this is
 just a simple proof of concept without any sanity checks and so on. It
 has been developed on NetBSD, so for running it on linux flavors, it
