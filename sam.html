@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+<head>
+<!-- 2024-04-12 Fr. 17:06 -->
+<meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Discovering the /sam/ editor</title>
+<meta name="author" content="Jörg Kollmann" />
+<meta name="generator" content="Org Mode" />
+<link rel="stylesheet" type="text/css" href="/chrome/rethink.css" />
+</head>
+<body>
+<div id="preamble" class="status">
+<img src="/chrome/image1.jpg"/><div style="padding:2vh"><a style="font-weight:900; text-decoration:none" href="/">Home</a><span style="float: right">last changed: 2024-04-12</span></div>
+</div>
+<div id="content" class="content">
+<h1 class="title">Discovering the <i>sam</i> editor</h1>
+
+<div id="outline-container-org8ffe4d1" class="outline-2">
+<h2 id="org8ffe4d1"></h2>
+<div class="outline-text-2" id="text-org8ffe4d1">
+<p>
+In Kernighan's book <i>UNIX: a history and a memoir</i>, he mentions the
+editor <i>sam</i>, which seems to have been in use by many well known
+members of the IT scene. So, when reading that book, I got curious and
+did a few experiments with this editor.
+</p>
+
+<p>
+It was quite an interesting experience. One of my first impressions
+was, this is almost like a <i>vi</i> of an alternate reality. <i>Vi</i> takes
+the commands and concepts of the <i>ed</i> editor from the command line to
+visual editing; <i>sam</i> does almost the same, but in a completely
+different way. It uses a GUI (by means of X11), but within that, it
+presents a command window (besides having actual text file windows).
+There you work like on a command line, issuing almost <i>ed</i>-like
+commands. But you must use the mouse to select regions, shift windows
+and use the menu to cut and paste or repeat commands.
+</p>
+
+<div id="org38afb2a" class="figure">
+<p><img src="./sam.png" alt="sam.png" />
+</p>
+<p><span class="figure-number">Figure 1: </span>The <i>sam</i> editor.</p>
+</div>
+
+<p>
+In difference to <i>vi</i>, that command language has been developed into
+an interesting direction<sup><a id="fnr.1" class="footref" href="#fn.1" role="doc-backlink">1</a></sup>. Of this development, two features should be
+mentioned here. First, instead of working with single lines of text,
+the commands have been adopted to work with blocks or regions of text,
+and second, the commands can be stacked together. So for example, you
+can formulate a regexp repeatedly selecting text blocks, like
+paragraphs. Then, for each of these selections, the next regexp can
+select sub-elements, like single sentences. And finally, you can use
+single commands or command sets working with or modifying that
+innermost current selection. Afterwards, the larger selection of the
+previous level is re-established and that level's iteration
+continues.
+</p>
+
+<p>
+As an example, here is a regexp matching a python function: it matches
+regions starting with a <i>def</i> keyword in the first column, then
+continues as long as it finds indented or empty lines. Using this
+regexp as a command works as known from <i>vi</i>, selecting the next
+matching region.
+</p>
+<div class="org-src-container">
+<pre class="src src-shell">/^def.+: *\n(^ +.*\n|^ *\n)+/
+</pre>
+</div>
+<p>
+The <i>x</i> command, applied to a region (here, we use the shortcut
+for <i>0,$</i> selecting all of the current file, <i>","</i>), is an iterator
+consecutively selecting each of the matches and then executing the
+following command on a new region defined by this selection. The <i>p</i>
+command just prints the current selection to the command window.
+</p>
+<div class="org-src-container">
+<pre class="src src-shell">,x/^def.+: *\n(^ +.*\n|^ *\n)+/ p
+</pre>
+</div>
+<p>
+The <i>y</i> command is an iterator selecting each part of the current
+region not matching it's regexp. So the following combination selects
+each python function, then for each selects the parts outside of possible
+docstrings, then prints each of them.
+</p>
+<div class="org-src-container">
+<pre class="src src-shell">,x/^def.+: *\n(^ +.*\n|^ *\n)+/ y/^ *<span class="org-string">"""(.|\n)*"""</span>/ p
+</pre>
+</div>
+
+<p>
+So this idea of structural regexps seems really interesting to me. On
+the other side, the way the GUI part of <i>sam</i> is working is totally
+uncommon nowadays. And I'd like to have more control over selecting
+windows or addressing different windows within the same command (like
+using the region of one window as input of a command and another
+window as output).
+</p>
+
+<p>
+But I don't want this experiment to get so far out of hand as to hack
+into the source of <i>sam</i>.
+To still continue experiments with these kinds of regexps,
+I did a small script called [[ssam][]], accessing
+<i>sam</i> as a stream editor from the command line. But beware, this is
+just a simple proof of concept without any sanity checks and so on. It
+has been developed on NetBSD, so for running it on linux flavors, it
+might need some tweaks.
+The script takes a text piped in, loading it into a <i>sam</i> instance
+started without GUI, sending the given commands to it and finally
+piping the modified editor contents out to stdout. As an alternative,
+you can specify commands printing out selections, so the result piped
+out should be these prints instead of the (probably unmodified) editor
+contents. To do this, you can use the "-p" option.
+</p>
+
+<p>
+Using this script, you could pipe in a python file and use the <i>sam</i>
+command shown above:
+</p>
+<div class="org-src-container">
+<pre class="src src-shell">cat myfile.py | ssam -p <span class="org-string">",x/^def.+: *\n(^ +.*\n|^ *\n)+/ y/^ *\"\"\"(.|\n)*\"\"\"/ p"</span> | less
+</pre>
+</div>
+<p>
+And, continuing my experiments, a final example, also showing the
+syntax to apply more then one command. This again selects python
+functions, and then, on each selection, applies two independent
+commands. The first one selects the first line of the current
+selection (the function definition) and prints it. The second one,
+again having the original selection as input, selects the docstring
+inside of the selected python function (if there is one) and prints that. 
+</p>
+<div class="org-src-container">
+<pre class="src src-shell">cat myfile.py | ssam -p <span class="org-string">",x/^def.+: *\n(^ +.*\n|^ *\n)+/ {</span>
+<span class="org-string">                             -+p</span>
+<span class="org-string">                             x/^ *\"\"\"(.|\n)*\"\"\"\n/ p</span>
+<span class="org-string">                         }"</span> | less
+</pre>
+</div>
+
+<p>
+So I'm really looking forward to finding applications of using this
+way of structural stream editing in my shell scripts.
+</p>
+</div>
+</div>
+<div id="footnotes">
+<h2 class="footnotes">Footnotes: </h2>
+<div id="text-footnotes">
+
+<div class="footdef"><sup><a id="fn.1" class="footnum" href="#fnr.1" role="doc-backlink">1</a></sup> <div class="footpara" role="doc-footnote"><p class="footpara">
+<i>Rob Pike: Structural Regular
+Expressions</i>, <a href="http://doc.cat-v.org/bell_labs/structural_regexps/">http://doc.cat-v.org/bell_labs/structural_regexps/</a>
+</p></div></div>
+
+
+</div>
+</div></div>
+<div id="postamble" class="status">
+<p class="author">Author: Jörg Kollmann (<a rel="me" href="https://mastodon.social/@joergkb">@joergkb@mastodon.social</a>)</p> <p>Made on emacs org-mode with <a href="https://jessekelly881-rethink.surge.sh/">Rethink</a></p>
+</div>
+</body>
+</html>

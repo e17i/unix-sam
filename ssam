@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+
+function tmpfifo {
+    name=$(mktemp)
+    rm $name
+    mkfifo $name
+    echo $name
+}
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -p|--print)
+            print=yes
+            shift
+            ;;
+        *)
+            cmd=("$1")
+            shift
+            ;;
+    esac
+done
+
+inpipe=$(tmpfifo)
+outpipe=$(tmpfifo)
+
+# start remote controlled sam
+(sam -d 2>/dev/null <<EOF
+<cat $inpipe
+$cmd
+,>cat >$outpipe
+q
+q
+EOF
+)&
+
+# send stdin to sam, then forward it's result to stdout
+cat >$inpipe
+if [[ "x${print}" == "xyes" ]]; then
+   cat $outpipe >/dev/null
+else
+    cat $outpipe
+fi
+rm $inpipe
+rm $outpipe
